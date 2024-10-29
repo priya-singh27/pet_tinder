@@ -8,5 +8,4 @@ router.get('/feed/:petId', authMiddleware, getPetBasedOnLoc);
 router.post('/register-pet', authMiddleware,registerPet);
 
 
-
 module.exports = router;
