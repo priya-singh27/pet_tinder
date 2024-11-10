@@ -51,17 +51,17 @@ const login = async (req, res) => {//You enter email and password and it finds u
     
         let [err, user] = await findUserByEmail(req.body.email);
 
-        if (!user.isOtpVerified) return badRequestResponse(res, "Email not verified");
-
         if (err) {
-            if (err.code == 400) {
-                return badRequestResponse(res, "User not found");
+            if (err.code == 404) {
+                return notFoundResponse(res, "User not found");
             }
                 
             if (err.code == 500) {
                 return serverErrorResponse(res, "Internal server error.");
             }
         }
+
+        if (!user.isOtpVerified) return badRequestResponse(res, "Email not verified");
     
         const isValid = await bcrypt.compare(req.body.password, user.password);
         if (!isValid) {
@@ -69,11 +69,12 @@ const login = async (req, res) => {//You enter email and password and it finds u
         }
     
         const token = user.generateAuthToken();
-        user = await user.save();
+        await user.save();
         res.setHeader('x-auth-token', token);
         return successResponse(res, null, "Successfully logged in");
         
     } catch (err) {
+        console.log(err);
         return serverErrorResponse(res, "Something went wrong");
     }
     
@@ -114,40 +115,45 @@ const verifyOtp = async (req, res) => {//Verifies the otp entered with otp sent
 
 const signup = async (req, res) => {//sends otp on given emailId and saves user's data in DB
  
-    //search for user in DB
-    const [err,user] = await findUserByEmail(req.body.email);
-    
-    if (err) {//If no user
-        if (err.code == 404) {//If user not found then create a user
-            try {
-                const {error} = joi_schema.signup.validate(req.body);
+    try {
+        //search for user in DB
+        const [err,user] = await findUserByEmail(req.body.email);
+        
+        if (err) {//If no user
+            if (err.code == 404) {//If user not found then create a user
+                try {
+                    const {error} = joi_schema.signup.validate(req.body);
 
-                if (error) {
-                    return badRequestResponse(res,"Invalid data entered");
+                    if (error) {
+                        return badRequestResponse(res,"Invalid data entered");
+                    }
+                    const otp = await generateOtp();
+                    await sendEmail(req.body.email, otp);
+
+                    let user = new User({
+                        username: req.body.firstName,
+                        email: req.body.email,
+                        password: req.body.password,
+                        otp:otp
+                    });
+                    const salt = await bcrypt.genSalt(12);
+                    user.password = await bcrypt.hash(user.password, salt);
+                    user = await user.save();
+                    return successResponse(res,user,"User saved in database");
+                } catch (err) {//If there is some error while creating the user do this 
+                    console.log(err);
+                    return serverErrorResponse(res,"Internal server error");
                 }
-                const otp = await generateOtp();
-                await sendEmail(req.body.email, otp);
-
-                let user = new User({
-                    username: req.body.firstName,
-                    email: req.body.email,
-                    password: req.body.password,
-                    otp:otp
-                });
-                const salt = await bcrypt.genSalt(12);
-                user.password = await bcrypt.hash(user.password, salt);
-                user = await user.save();
-                return successResponse(res,user,"User saved in database");
-            } catch (err) {//If there is some error while creating the user do this 
-                console.log(err);
-                return serverErrorResponse(res,"Internal server error");
+            } else {//If error code is other than 404
+                return serverErrorResponse(res,"Internal Server Error: unable to generate OTP");
             }
-        } else {//If error code is other than 404
-            return serverErrorResponse(res,"Internal Server Error: unable to generate OTP");
+            
+        } else {//If no error => user exist with the given data
+            return badRequestResponse(res,"User already registered");
         }
-         
-    } else {//If no error => user exist with the given data
-        return badRequestResponse(res,"User already registered");
+    } catch (err) {
+        console.log(err);
+        return serverErrorResponse(res,"Internal server error.");
     }
 }
 
