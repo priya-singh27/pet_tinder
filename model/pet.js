@@ -18,7 +18,7 @@ const petSchema = new mongoose.Schema({
     age: Number,
     profilePicture: String,
     swipeCount: Number,
-    location: { // Define location as a nested object
+    location: { // Define location as a nested object.
         type: {
             type: String, // This will be "Point"
             enum: ['Point'], // Restrict to "Point"
@@ -30,8 +30,6 @@ const petSchema = new mongoose.Schema({
     }
 
 });
-
-
 
 const Pet = mongoose.model('Pet', petSchema);
 
